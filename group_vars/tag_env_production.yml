@@ -1,0 +1,27 @@
+---
+# ----------------------------------------
+# environment production
+# ----------------------------------------
+termination_protection: true
+
+# VPC settings
+cidr_block: 172.28.0.0/16
+subnets:
+  - cidr: 172.28.0.0/24
+    az: "{{ region }}a"
+    resource_tags:
+      Name: public-{{ env }}-{{ region }}a
+      env: "{{ env }}"
+      sec: public
+  - cidr: 172.28.1.0/24
+    az: "{{ region }}b"
+    resource_tags:
+      Name: public-{{ env }}-{{ region }}a
+      env: "{{ env }}"
+      sec: public
+  - cidr: 172.28.2.0/24
+    az: "{{ region }}c"
+    resource_tags:
+      Name: public-{{ env }}-{{ region }}a
+      env: "{{ env }}"
+      sec: public

@@ -1,0 +1,45 @@
+---
+
+- name: Create IAM Role
+  local_action:
+    module: command {{ aws_cli }} iam list-roles
+  register: list_roles
+  when: ansible_version.major < 2
+
+- set_fact:
+    roles_found: "{{ list_roles.stdout | from_json() }}"
+
+- debug: var=roles_found
+  when: debug | bool
+
+- set_fact:
+    role_exists: true
+  with_items: "{{ roles_found.Roles }}"
+  when: item.RoleName == iam_role_name
+
+- name: Create IAM Role
+  local_action:
+    module: command {{ aws_cli }} iam create-role --role-name {{ iam_role_name }} --assume-role-policy-document file://{{ playbook_dir }}/roles/create-iam-role/files/role-policy-document.json
+  when: ansible_version.major < 2 and
+        not role_exists | bool
+
+- name: Create Instance Profile
+  local_action:
+    module: command {{ aws_cli }} iam create-instance-profile --instance-profile-name {{ iam_role_name }}
+  when: ansible_version.major < 2 and
+        not role_exists | bool
+
+- name: Add Role to Instance Profile
+  local_action:
+    module: command {{ aws_cli }} iam add-role-to-instance-profile --role-name {{ iam_role_name }} --instance-profile-name {{ iam_role_name }}
+  when: ansible_version.major < 2 and
+        not role_exists | bool
+
+# with Ansible 2.0 core-modules
+- name: Create instance IAM Role
+  local_action:
+    module: iam
+    profile: "{{ profile | default(omit) }}"
+    name: "{{ iam_role_name }}"
+    iam_type: role
+  when: ansible_version.major >= 2

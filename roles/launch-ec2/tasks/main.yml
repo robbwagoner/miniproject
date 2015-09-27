@@ -1,0 +1,115 @@
+---
+- name: Create Security Group "all-env"
+  local_action:
+    module: ec2_group
+    name: all-{{ env }}
+    description: all {{ env }} instances
+    state: present
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region | default(omit) }}"
+    profile: "{{ profile | default(omit) }}"
+    purge_rules: true
+    rules:
+    purge_rules_egress: true
+    rules_egress:
+  register: sg_result_env
+
+- debug: var=sg_result_env
+  when: debug | bool
+
+- name: Create Security Group "tier-env"
+  local_action:
+    module: ec2_group
+    name: "{{ tier }}-{{ env }}"
+    description: "{{ tier }} {{ env }} instances"
+    state: present
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region | default(omit) }}"
+    profile: "{{ profile | default(omit) }}"
+    purge_rules: true
+    rules:
+      - proto: tcp
+        from_port: 80
+        to_port: 80
+        cidr_ip: 0.0.0.0/0
+    purge_rules_egress: true
+    rules_egress:
+  register: sg_result_tier
+
+- debug: var=sg_result_tier
+  when: debug | bool
+
+- name: Launch the instance
+  ec2:
+    region: "{{ region | default(omit) }}"
+    profile: "{{ profile | default(omit) }}"
+    instance_type: "{{ instance_type }}"
+    instance_profile_name: "{{ iam_role_name }}"
+    keypair: "{{ keypair }}"
+    image: "{{ ami_id }}" 
+    group_id:
+      - "{{ sg_result_all.group_id }}"
+      - "{{ sg_result_env.group_id }}"
+      - "{{ sg_result_tier.group_id }}"
+    vpc_subnet_id: "{{ vpc_subnet_id }}"
+    assign_public_ip: "{{ assign_public_ip }}"
+    user_data: "{{ user_data }}"
+    instance_tags:
+      Name: "{{ instance_name }}"
+      env: "{{ env }}"
+      tier: "{{ tier }}"
+    count_tag: 
+      Name: "{{ instance_name }}"
+      env: "{{ env }}"
+      tier: "{{ tier }}"
+    exact_count: 1
+    wait: true
+  register: ec2_result
+
+- debug: var=ec2_result
+  when: debug | bool
+
+- name: Flatten list of launched instances
+  set_fact:
+    launched_instances: "{{ ec2_result.instances | union(ec2_result.tagged_instances) }}"
+
+- name: Launched Instances
+  debug: var=launched_instances
+
+# REMOVEME: when Ansible 2.0
+- name: Termination Protection
+  local_action:
+    module: command {{ aws_cli }} ec2 modify-instance-attribute --instance-id {{ item.id }} --disable-api-termination
+  with_items: "{{ launched_instances }}"
+  when: termination_protection | bool and
+        env == "production" and
+        ansible_version.major < 2
+
+- name: VPC Add instance private_ip to host groups
+  add_host:
+    name: "{{ item.0.private_ip }}"
+    groups: "{{ item.1 }}"
+  with_nested:
+    - launched_instances
+    - add_to_groups
+  when: ansible_iface == 'private'
+
+- name: Add instances public DNS name to host groups
+  add_host:
+    name: "{{ item.0.public_dns_name }}"
+    groups: "{{ item.1 }}"
+  with_nested:
+    - launched_instances
+    - add_to_groups
+  when: ansible_iface == "public"
+
+- debug: var={{item}}
+  with_items: "{{ launched_instances }}"
+
+- name: Wait for SSH to start
+  wait_for:
+    port: 22
+    host: "{{ item }}"
+  with_items: "{{ groups.launch }}"
+
+# vim: set ts=2 sw=2 sts=2 et :

@@ -1,0 +1,5 @@
+---
+doc_root: /usr/share/nginx/html
+web_service: nginx
+packages:
+  - nginx

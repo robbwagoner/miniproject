@@ -1,0 +1,8 @@
+---
+# -------------------------------------
+# All groups
+# -------------------------------------
+ordinal: 1
+instance_name: "{{ tier }}-{{ env }}-{{ ordinal }}"
+iam_role_name: "{{ tier }}-{{ env }}"
+termination_protection: false

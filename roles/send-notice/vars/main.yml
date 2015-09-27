@@ -1,0 +1,7 @@
+---
+message: "Playbook {{ playbook_name }} is done."
+
+with_slack: no
+slack_domain: DEFINE ME
+slack_token: DEFINE ME
+

@@ -1,0 +1,115 @@
+---
+# This playbook creates the necessary VPC infrastructure and launches a single instance to that VPC. 
+# The variable `ordinal` sets the instance name suffix. E.g. `-1`, `-2`, etc.
+#
+# USAGE:
+#   ansible-playbook -i inventory deploy-web-message.yml --extra-vars 'region=us-west-2 env=test '
+#
+# NOTE: Uses Ansible Dynamic Inventory for EC2, which is Python Boto-based. Relevant AWS_ environment 
+#       variables are required (AWS_REGION, AWS_PROFILE, etc) unless the playbook is being executed 
+#       from an EC2 instance with IAM Role which grants the necessary privileges to make EC2 & RDS API calls.
+#       
+# VARIABLES:
+#   region : The AWS Region. All are supported.
+#   profile : The Boto profile to use when making AWS API calls.
+#   env : The environment. Values: dev|test|production
+#   ordinal : The ordinal suffix for the instance name. Default: 1 (e.g. `-1`)
+#   instance_type : The type of instance to launch. Default: t2.micro
+#   ansible_iface : When running the playbook on a host outside outside EC2, set to 'public' to use the public DNS 
+#                   of the launched instance(s). Default: 'private' since hosts are launched into VPC-only. 
+
+
+- name: Create infrastructure
+  hosts: localhost
+  
+  # Defaults
+  vars:
+
+    ordinal: 1
+    tier: web
+
+  pre_tasks:
+
+    - name: Load group_vars for localhost
+      include_vars: group_vars/{{ region }}.yml
+      tags: always
+
+    - name: Load group_vars for localhost
+      include_vars: group_vars/tag_env_{{ env }}.yml
+      tags: always
+
+    - name: Load group_vars for localhost
+      include_vars: group_vars/tag_tier_{{ tier }}.yml
+      tags: always
+
+  roles:
+
+    - role: create-vpc
+      tags: vpc
+
+    - role: create-iam-role
+      tags: iam
+
+    - role: launch-ec2
+      tags: ec2
+      vpc_id: "{{ vpc_result.vpc_id }}"
+      vpc_subnet_id: "{{ vpc_result.subnets[0].id }}"
+
+- name: Deploy message
+  tags: message
+  hosts: launch:tag_env_{{env}}:&tag_tier_{{tier}}
+  user: ec2-user
+
+  vars:
+
+    tier: web
+    message: Automation for the People!
+
+  roles:
+
+    - role: web-message
+      message: "{{ message }}"
+
+  post_tasks:
+
+    - debug: var=msg_stat
+
+    - name: Retrieve message
+      local_action:
+        module: get_url
+        url: "{{ proto }}://{{ ansible_ec2_public_hostname }}/index.html"
+        dest: "{{ playbook_dir }}/.tmp-{{ ansible_ec2_public_hostname }}-index.html"
+
+    - name: Read message
+      local_action:
+        module: stat
+        path: "{{ playbook_dir }}/.tmp-{{ ansible_ec2_public_hostname }}-index.html"
+      register: msg_stat_remote
+
+    - name: Verify message
+      assert:
+        that: msg_stat.stat.checksum == msg_stat_remote.stat.checksum 
+        msg: Message checksums do not match.
+
+    - name: Cleanup temp files
+      local_action:
+        module: command rm {{ playbook_dir }}/.tmp-{{ ansible_ec2_public_hostname }}-index.html
+
+    - debug:
+        msg: See your message at {{ proto }}://{{ item }} 
+      with_items: "{{ play_hosts | unique }}"
+
+- name: Playbook is complete.
+  tags: always
+  hosts: localhost
+  gather_facts: no
+
+  vars:
+    message: Automation for the People!
+
+  roles:
+
+    - role: send-notice
+      message: "Your web message, {{ message }}, is live."
+
+# vim: set ts=2 sw=2 sts=2 et :

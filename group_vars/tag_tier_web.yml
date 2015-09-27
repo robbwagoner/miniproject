@@ -1,0 +1,15 @@
+---
+# --------------------------------------
+# Tier: web
+# --------------------------------------
+instance_type: t2.micro
+
+# EC2 instance user-data
+user_data: |
+  #cloud-config
+  hostname: "{{ instance_name }}"
+  fqdn: "{{ instance_name }}.{{ region }}.localdomain"
+  manage_etc_hosts: yes
+  package_update: true
+  package_upgrade: true
+

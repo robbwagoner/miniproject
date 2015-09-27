@@ -1,0 +1,30 @@
+---
+
+- ec2_facts:
+
+- include_vars: amazon.yml
+  when: ansible_distribution == "Amazon"
+
+- include: amazon.yml
+  when: ansible_distribution == "Amazon"
+
+- name: Start web server
+  service:
+    name: "{{ web_service }}"
+    state: started
+  sudo: yes
+
+- name: Create the message
+  template:
+    src: index.html.j2
+    dest: "{{ doc_root }}/index.html"
+    owner: root
+    group: root
+    mode: "0644"
+  sudo: yes
+
+- name: Checksum the message
+  stat:
+    path: "{{ doc_root }}/index.html"
+    get_checksum: true
+  register: msg_stat

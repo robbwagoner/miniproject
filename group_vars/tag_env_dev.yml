@@ -1,0 +1,14 @@
+---
+# ----------------------------------------
+# environment dev
+# ----------------------------------------
+
+# VPC settings
+cidr_block: 172.30.0.0/16
+subnets:
+  - cidr: 172.30.0.0/24
+    az: "{{ region }}a"
+    resource_tags:
+      Name: public-{{ env }}-{{ region }}a
+      env: "{{ env }}"
+      sec: public

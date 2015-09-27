@@ -1,0 +1,10 @@
+---
+debug: false
+ansible_iface: private
+termination_protection: true
+assign_public_ip: true
+add_to_groups:
+  - launch
+  - "{{ region }}"
+  - "tag_env_{{ env }}"
+  - "tag_tier_{{ tier }}"

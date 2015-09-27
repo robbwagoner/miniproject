@@ -1,0 +1,14 @@
+---
+
+- name: restart nginx
+  service:
+    name: nginx
+    state: restarted
+  sudo: yes
+  notify:
+    - verify nginx
+
+- name: verify nginx
+  wait_for:
+    port: 80
+

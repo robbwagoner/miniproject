@@ -1,0 +1,61 @@
+---
+- name: Create the VPC
+  local_action:
+    module: ec2_vpc
+    state: present
+    region: "{{ region | default(omit) }}"
+    profile: "{{ profile | default(omit) }}"
+    cidr_block: "{{ cidr_block }}"
+    resource_tags:
+      Name: "{{ env }}"
+      env: "{{ env }}"
+    subnets: "{{ subnets }}"
+    internet_gateway: True
+  register: vpc_result
+
+- debug: var=vpc_result
+  when: debug | bool
+
+- name: Get Internet Gateway information
+  local_action: command {{ aws_cli }} ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values={{ vpc_result.vpc_id }}"
+  register: igw_cmd
+
+- name: Set internet_gateway variable
+  set_fact:
+    internet_gateway: "{{ igw_cmd.stdout | from_json() }}"
+
+- name: Get Route Table information
+  local_action: command {{ aws_cli }} ec2 describe-route-tables --filters "Name=vpc-id,Values={{ vpc_result.vpc_id }}"
+  register: rtb_cmd
+  
+- name: Set route_table variable
+  set_fact:
+    route_table: "{{ rtb_cmd.stdout | from_json() }}" 
+
+- name: Enable default route to Internet for public subnets
+  local_action: command {{ aws_cli }} ec2 create-route --route-table-id {{ route_table.RouteTables[0].RouteTableId }} --destination-cidr-block 0.0.0.0/0 --gateway-id {{ internet_gateway.InternetGateways[0].InternetGatewayId }}
+  with_items: "{{ vpc_result.subnets }}"
+  when: item.resource_tags.sec == "public"
+
+- name: Create Security Group "all"
+  local_action:
+    module: ec2_group
+    name: all
+    description: all instances
+    state: present
+    vpc_id: "{{ vpc_result.vpc_id }}"
+    region: "{{ region | default(omit) }}"
+    profile: "{{ profile | default(omit) }}"
+    purge_rules: true
+    rules:
+      - proto: tcp
+        from_port: 22
+        to_port: 22
+        cidr_ip: 0.0.0.0/0
+        #group_id: sg-1234abcd # bastion host security group, typically
+    purge_rules_egress: true
+    rules_egress:
+  register: sg_result_all
+
+- debug: var=sg_result_all
+  when: debug | bool

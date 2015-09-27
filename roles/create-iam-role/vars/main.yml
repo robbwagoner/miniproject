@@ -1,0 +1,3 @@
+---
+aws_cli: aws --profile {{ profile }} --region {{ region }}
+role_exists: false
